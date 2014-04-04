@@ -43,14 +43,18 @@
         this.render = this.options.render || this.render;
         this.setFooter = this.options.setFooter || this.setFooter;
         this.dataModel = this.options.dataModel;
-        this.isChildCol = this.options.isChildCol || this.isChildCol;
+        this.childRowProperty = this.options.childRowProperty;
+        this.expandedRowIds = new Array();
 
         // initialize objects
         this.$grid = $(this.options.grid);
         this.$grid.addClass(this.options.gridClass);
         this.$title = $(this.options.title);
         this.$initLoader = $(this.options.initLoader);
-        this.$footerRow = this.$grid.find('tfoot td:first').attr('colspan', this.dataModel.length);
+        this.$header = this.$grid.find('thead');
+        this.$body = this.$grid.find('tbody');
+        this.$footer = this.$grid.find('tfoot');
+        this.$footerRow = this.$footer.find('td:first').attr('colspan', this.dataModel.length);
         this.$footerContainer = $('<div class="pull-left"></div>');
         this.$refreshBtn = $(this.options.refreshBtn).on('click', function(){that.refresh()});
         this.$loader = $(this.options.loader);
@@ -58,41 +62,25 @@
         this.$backBtn  = $('<i class="icon-backward icon-disabled"></i>');
         this.$nextBtn = $('<i class="icon-forward icon-disabled"></i>');
         this.$endBtn  = $('<i class="icon-fast-forward icon-disabled"></i>');
-        this.$pagerDetails = $('<span></span>');
-        this.$pageSizeSelector = $('<select class="page-size-selector"></select>')
-            .on('change', function(){that.changePageSize(that.$pageSizeSelector.val())});
+        this.$pageCountText = $('<span>1</span>');
+        this.$pageSelector = $('<select class="page-size-selector"></select>');
+        this.$pageSizeSelector = $('<select class="page-size-selector"></select>');
 
-        // bind footer
-        this.$footerContainer.append(this.$startBtn);
-        this.$footerContainer.append(this.$backBtn);
-        this.$footerContainer.append(this.$pagerDetails);
-        this.$footerContainer.append(this.$nextBtn);
-        this.$footerContainer.append(this.$endBtn);
-        this.$footerContainer.append(this.$refreshBtn);
-        this.$footerContainer.append(this.$loader);
-
-        if(this.options.showPageSizeSelector){
-            var selectorContainer = $('<span class="page-size-selector-container"></span>');
-            selectorContainer.append($('<span>Page Size: </span>'));
-            for(var i in this.options.pageSizes){
-                var pageSize = this.options.pageSizes[i];
-                this.$pageSizeSelector.append($('<option></option>').attr('value', pageSize.value).text(pageSize.text));
-            }
-            selectorContainer.append(this.$pageSizeSelector);
-            this.$footerContainer.append(selectorContainer);
-        }
-        this.$footerRow.append(this.$footerContainer);
 
         // bind title, table and initLoader
         this.$element.append(this.$title);
         this.$element.append(this.$initLoader);
         this.$initLoader.show();
 
-        // load data
+
         this.buildHeader();
+        this.buildFooter();
+
+        // load data
         this.getPage(this.currentPage);
         this.$element.append(this.$grid);
         this.$initLoader.hide();
+        this.$loader.hide();
     };
 
     PGGrid.prototype = {
@@ -119,49 +107,94 @@
             return this;
         },
         buildBody: function(data){
-            var body = this.$grid.find('tbody');
-            body.empty();
+            this.$body.empty();
 
             for(var i in data.items){
-                this.buildRow(data.items[i], body);
+                this.buildRow(data.items[i], 0);
             }
         },
-        buildRow: function(item, body){
-            var row = $(this.options.item);
-            row.attr('data-value', item)
+        buildRow: function(item, childLevel, parentId){
+            var that = this;
+            var id = item.id;
+
+            var row = $("<tr></tr>")
+                .attr('data-value', item)
                 .attr('id', item.id)
                 .on('mouseEnter', 'tbody tr', $.proxy(this.mouseEnter, this))
                 .on('mouseLeave', 'tbody tr', $.proxy(this.mouseLeave, this));
 
 
-            this.buildCol(item, row);
-            body.append(row);
+            if(childLevel > 0) {
+                if($.inArray(parentId, this.expandedRowIds) < 0)
+                    row.hide();
+                row.attr('data-parent-id', parentId);
+            }
+
+            this.buildCols(item, row, childLevel);
+            this.$body.append(row);
+
+            if(item.hasOwnProperty(this.childRowProperty)){
+                var expander = $('<i class="'+ ($.inArray(id, this.expandedRowIds) >= 0 ? 'icon-chevron-down' : 'icon-chevron-right') + ' icon-active"></i>')
+                    .on('click', function(){ that.toggleChildren($(this), id); });
+                row.find('td:first').prepend(expander);
+
+                for(var i in item[this.childRowProperty]){
+                    this.buildRow(item[this.childRowProperty][i], childLevel + 1, id);
+                }
+            }
         },
-        buildCol: function(item, row){
+        buildCols: function(item, row, childLevel){
             for(var i in this.dataModel){
                 var model = this.dataModel[i];
-                var col = $('<td></td>');
+                var col = $('<td></td>').css('padding-left', (16 * childLevel));
                 var val = item[model.index];
                 if(typeof model.formatter !== 'undefined')
                     val = model.formatter(val);
-                col.html(val);
+                col.append(val);
                 row.append(col);
             }
         },
         buildHeader: function(){
-            var headerRow = this.$grid.find('thead tr:first');
+            var headerRow = this.$header.find('tr:first');
             headerRow.empty();
+
             for(var i in this.dataModel){
-                var model = this.dataModel[i];
-                var col = $('<td></td>');
-                var val = model.name;
-                col.html(val);
-                headerRow.append(col);
+                headerRow.append($('<td></td>').html(this.dataModel[i].name));
             }
+        },
+        buildFooter: function(){
+            var that = this;
+            this.$pageSelector.on('change', function(){that.changePage(that.$pageSelector.val())});
+            var $pagerDetails = $('<span>Page&nbsp;</span>')
+                .append(this.$pageSelector)
+                .append('&nbsp;of&nbsp;')
+                .append(this.$pageCountText);
+
+            this.$footerContainer.append(this.$startBtn);
+            this.$footerContainer.append(this.$backBtn);
+            this.$footerContainer.append($pagerDetails);
+            this.$footerContainer.append(this.$nextBtn);
+            this.$footerContainer.append(this.$endBtn);
+            this.$footerContainer.append(this.$refreshBtn);
+            this.$footerContainer.append(this.$loader);
+
+            this.$pageSizeSelector.on('change', function(){that.changePageSize(that.$pageSizeSelector.val())});
+            if(this.options.showPageSizeSelector){
+                var selectorContainer = $('<span class="page-size-selector-container"></span>');
+                selectorContainer.append($('<span>Page Size: </span>'));
+                for(var i in this.options.pageSizes){
+                    var pageSize = this.options.pageSizes[i];
+                    this.$pageSizeSelector.append($('<option></option>').attr('value', pageSize.value).text(pageSize.text));
+                }
+                selectorContainer.append(this.$pageSizeSelector);
+                this.$footerContainer.append(selectorContainer);
+            }
+            this.$footerRow.append(this.$footerContainer);
         },
         setFooter: function(data) {
             var totalPages = Math.ceil(data.total / this.pageSize);
-            this.$pagerDetails.text('Page '+ this.currentPage +' of '+ totalPages);
+            this.$pageSelector.text(this.currentPage);
+            this.$pageCountText.text(totalPages);
 
             this.$startBtn.off();
             this.$backBtn.off();
@@ -202,6 +235,14 @@
                 this.$nextBtn.addClass('icon-disabled')
                     .removeClass('icon-active');
             }
+
+            for(var i = 1; i <= totalPages; i++){
+                var option = $('<option></option>').attr('value', i).text(i);
+                if(i == this.currentPage)
+                    option.attr('selected', 'selected');
+
+                this.$pageSelector.append(option);
+            }
         },
         nextPage: function() {
             this.getPage(this.currentPage + 1);
@@ -212,13 +253,18 @@
         refresh: function() {
             this.showLoader();
             this.getPage(this.currentPage);
+            this.getPage(this.currentPage);
             this.hideLoader();
         },
         getPage: function(page){
             this.currentPage = page;
-            this.showLoader();
+            //this.showLoader();
             this.getData(page, this.pageSize, $.proxy(this.process, this));
-            this.hideLoader();
+            //this.hideLoader();
+        },
+        changePage: function(page) {
+            this.currentPage = page;
+            this.refresh();
         },
         changePageSize: function(pageSize) {
             this.pageSize = pageSize;
@@ -233,9 +279,6 @@
             this.mousedover = false;
             $(e.currentTarget).removeClass('active');
         },
-        isChildCol: function(item, data){
-            return false;
-        },
         showLoader: function(){
             this.$refreshBtn.hide();
             this.$loader.show();
@@ -243,6 +286,32 @@
         hideLoader: function(){
             this.$refreshBtn.show();
             this.$loader.hide();
+        },
+        toggleChildren: function(obj, parentId){
+            var isCurrentlyExpanded = obj.hasClass('icon-chevron-down');
+
+            if(!isCurrentlyExpanded){
+                obj.removeClass('icon-chevron-right')
+                    .addClass('icon-chevron-down');
+
+                this.showChildRows(parentId);
+                this.expandedRowIds.push(parentId);
+            }
+            else{
+                obj.removeClass('icon-chevron-down')
+                    .addClass('icon-chevron-right');
+
+                this.hideChildRows(parentId);
+                this.expandedRowIds.pop(parentId);
+            }
+        },
+        showChildRows: function(parentId){
+            var childRows = this.$body.find('tr[data-parent-id=' + parentId + ']');
+            childRows.each(function(index, el){$(el).show()});
+        },
+        hideChildRows: function(parentId){
+            var childRows = this.$body.find('tr[data-parent-id=' + parentId + ']');
+            childRows.each(function(index, el){$(el).hide()});
         }
     };
 
@@ -263,7 +332,6 @@
     };
 
     $.fn.pgGrid.defaults = {
-        source: [],
         grid: '<table class="pgGrid"><thead><tr></tr></thead><tbody></tbody><tfoot><tr><td></td></tr></tfoot></table>',
         gridClass: "table table-condensed table-bordered table-striped table-form",
         item: '<tr></tr>',
@@ -272,13 +340,14 @@
         showPageSizeSelector: true,
         pageSizes: [{text:"10", value: 10}, {text:"20", value: 20}, {text:"30", value: 30}, {text:"All", value: -1}],
         dataModel: [
-            { name: 'Id', index: 'id', width: 1 },
-            { name: 'Value', index: 'value', width: 415 }
+            { name: 'Id', index: 'id'},
+            { name: 'Value', index: 'value', formatter: function(val){ return '**' + val + '**'}}
         ],
         title: '<h4>Data</h4>',
         initLoader: '<div><i class="icon-refresh icon-spin"></i> Loading data...</div>',
         refreshBtn: '<i class="icon-refresh icon-active"></i>',
-        loader: '<i class="icon-refresh icon-spin"></i>'
+        loader: '<i class="icon-refresh icon-spin"></i>',
+        childRowProperty: 'children'
     };
 
     $.fn.pgGrid.Constructor = PGGrid;
