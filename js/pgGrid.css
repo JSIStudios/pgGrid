@@ -2,6 +2,20 @@
     font-weight: bold;
 }
 
+.pgGrid thead td .icon,
+.pgGrid thead td [class*=" icon-"],
+.pgGrid thead td [class*=" icon-"] {
+    width: 16px;
+    height: 16px;
+    float: right;
+}
+
+.pgGrid thead td.sortable:hover{
+    text-decoration: underline;
+    color: #006dcc;
+    cursor: pointer;
+}
+
 .pgGrid tfoot i{
     margin: 0 2px;
 }
@@ -18,11 +32,29 @@
     font-size: 11px;
 }
 
+.icon {
+    width: 16px;
+    height: 16px;
+}
+.icon-expand {
+    background-position: -408px -168px;
+}
+
+.icon-collapse {
+    background-position: -432px -168px;
+}
+
+.icon-collapse-up {
+    background-position: -456px -168px;
+}
+
+.icon-blue,
 .icon-active:hover {
     background-image: url("./tests/vendor/images/glyphicons-halflings-blue.png");
     cursor: pointer;
 }
 
+.icon-grey,
 .icon-disabled{
     background-image: url("./tests/vendor/images/glyphicons-halflings-grey.png");
 }

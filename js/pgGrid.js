@@ -33,22 +33,28 @@
         // initialize and aggregate options
         this.options = $.extend({}, $.fn.pgGrid.defaults, options);
 
-        // initialize methods and properties from options
+        // initialize properties
         this.item = this.options.item;
         this.currentPage = this.options.initialPage;
         this.pageSize = this.options.pageSize;
         this.showPageSizeSelector = this.options.showPageSizeSelector;
+        this.dataModel = this.options.dataModel;
+        this.childRowProperty = this.options.childRowProperty;
+        this.expandedRowIds = new Array();
+        this.sortColumn = this.options.sortColumn;
+        this.sortDirection = this.options.sortDirection;
+        this.url = this.options.url;
+
+        // initialize methods
         this.getData = this.options.getData || this.getData;
         this.process = this.options.process || this.process;
         this.render = this.options.render || this.render;
         this.setFooter = this.options.setFooter || this.setFooter;
-        this.dataModel = this.options.dataModel;
-        this.childRowProperty = this.options.childRowProperty;
-        this.expandedRowIds = new Array();
+        this.onSuccess = this.options.onSuccess || function(){ return; };
+        this.onError = this.options.onError || function(){ return; };
 
         // initialize objects
-        this.$grid = $(this.options.grid);
-        this.$grid.addClass(this.options.gridClass);
+        this.$grid = $('<table class="pgGrid"><thead><tr></tr></thead><tbody></tbody><tfoot><tr><td></td></tr></tfoot></table>');
         this.$title = $(this.options.title);
         this.$initLoader = $(this.options.initLoader);
         this.$header = this.$grid.find('thead');
@@ -67,12 +73,11 @@
         this.$pageSizeSelector = $('<select class="page-size-selector"></select>');
 
 
-        // bind title, table and initLoader
+        // bind title, table
+        this.$grid.addClass(this.options.gridClass);
         this.$element.append(this.$title);
         this.$element.append(this.$initLoader);
         this.$initLoader.show();
-
-
         this.buildHeader();
         this.buildFooter();
 
@@ -85,21 +90,22 @@
 
     PGGrid.prototype = {
         constructor: PGGrid,
-        show: function() {
-            this.$grid.show();
-            return this;
+        getData: function(page, pageSize, sortCol, sortDir, process) {
+            var that = this;
+            this.showLoader();
+            $.get(this.url, {page: page, limit: pageSize, sortColumn: sortCol, sortDirection: sortDir},
+                function(data, textStatus, jqXHR) {
+                    that.onSuccess(data, textStatus, jqXHR);
+                    that.hideLoader();
+                })
+                .fail(this.onError);
         },
-        hide: function() {
-            this.$grid.hide();
-            return this;
-        },
-        getData: function(page, pageSize, process) { return this; },
         process: function(data) {
             if (!data.items.length) {
                 return this.hide();
             }
 
-            return this.render(data).show();
+            return this.render(data);
         },
         render: function(data) {
             this.buildBody(data);
@@ -118,7 +124,6 @@
             var id = item.id;
 
             var row = $("<tr></tr>")
-                .attr('data-value', item)
                 .attr('id', item.id)
                 .on('mouseEnter', 'tbody tr', $.proxy(this.mouseEnter, this))
                 .on('mouseLeave', 'tbody tr', $.proxy(this.mouseLeave, this));
@@ -149,7 +154,7 @@
                 var col = $('<td></td>').css('padding-left', (16 * childLevel));
                 var val = item[model.index];
                 if(typeof model.formatter !== 'undefined')
-                    val = model.formatter(val);
+                    val = model.formatter(val, item);
                 col.append(val);
                 row.append(col);
             }
@@ -158,8 +163,46 @@
             var headerRow = this.$header.find('tr:first');
             headerRow.empty();
 
+            var that = this;
             for(var i in this.dataModel){
-                headerRow.append($('<td></td>').html(this.dataModel[i].name));
+                var hCol = $('<td></td>')
+                    .html(this.dataModel[i].name);
+                if(!this.dataModel[i].hasOwnProperty('sortable') || this.dataModel[i].sortable){
+                    hCol.addClass('sortable')
+                        .append($('<i class="icon"></i>'))
+                        .attr('data-sort-index', this.dataModel[i].index)
+                        .hover(function () {
+                            var me = $(this);
+                            if (that.sortColumn == me.attr('data-sort-index'))
+                                return;
+                            me.find('i').addClass("icon-collapse");
+                        }, function () {
+                            var me = $(this);
+                            if (that.sortColumn == me.attr('data-sort-index'))
+                                return;
+                            me.find('i').removeClass("icon-collapse");
+                        })
+                        .click(function () {
+                            var me = $(this);
+                            me.find('i').removeClass(function (i, css) {
+                                return (css.match(/\bicon-\S+/g) || []).join(' ');
+                            });
+                            if (that.sortColumn == me.attr('data-sort-index')) {
+                                that.sortDirection = that.sortDirection == 'ASC' ? 'DESC' : 'ASC';
+                                me.find('i').addClass(that.sortDirection == 'ASC' ? 'icon-collapse' : 'icon-collapse-up');
+                            }
+                            else {
+                                me.closest('tr').find('i').removeClass(function (i, css) {
+                                    return (css.match(/\bicon-\S+/g) || []).join(' ');
+                                });
+                                that.sortColumn = me.attr('data-sort-index');
+                                that.sortDirection = "ASC";
+                                me.find('i').addClass('icon-collapse');
+                            }
+                            that.refresh();
+                        });
+                }
+                headerRow.append(hCol);
             }
         },
         buildFooter: function(){
@@ -184,7 +227,9 @@
                 selectorContainer.append($('<span>Page Size: </span>'));
                 for(var i in this.options.pageSizes){
                     var pageSize = this.options.pageSizes[i];
-                    this.$pageSizeSelector.append($('<option></option>').attr('value', pageSize.value).text(pageSize.text));
+                    this.$pageSizeSelector.append($('<option></option>')
+                        .attr('value', pageSize.value)
+                        .text(pageSize.text));
                 }
                 selectorContainer.append(this.$pageSizeSelector);
                 this.$footerContainer.append(selectorContainer);
@@ -192,7 +237,7 @@
             this.$footerRow.append(this.$footerContainer);
         },
         setFooter: function(data) {
-            var totalPages = Math.ceil(data.total / this.pageSize);
+            var totalPages = this.pageSize == -1 ? 1 : Math.ceil(data.total / this.pageSize);
             this.$pageSelector.text(this.currentPage);
             this.$pageCountText.text(totalPages);
 
@@ -251,16 +296,12 @@
             this.getPage(this.currentPage - 1);
         },
         refresh: function() {
-            this.showLoader();
-            this.getPage(this.currentPage);
-            this.getPage(this.currentPage);
-            this.hideLoader();
+            this.getData(this.currentPage, this.pageSize, this.sortColumn,
+                this.sortDirection, $.proxy(this.process, this));
         },
         getPage: function(page){
             this.currentPage = page;
-            //this.showLoader();
-            this.getData(page, this.pageSize, $.proxy(this.process, this));
-            //this.hideLoader();
+            this.refresh();
         },
         changePage: function(page) {
             this.currentPage = page;
@@ -332,22 +373,24 @@
     };
 
     $.fn.pgGrid.defaults = {
-        grid: '<table class="pgGrid"><thead><tr></tr></thead><tbody></tbody><tfoot><tr><td></td></tr></tfoot></table>',
-        gridClass: "table table-condensed table-bordered table-striped table-form",
-        item: '<tr></tr>',
-        initialPage: 1,
-        pageSize: 10,
-        showPageSizeSelector: true,
-        pageSizes: [{text:"10", value: 10}, {text:"20", value: 20}, {text:"30", value: 30}, {text:"All", value: -1}],
+        childRowProperty: 'children',
         dataModel: [
             { name: 'Id', index: 'id'},
-            { name: 'Value', index: 'value', formatter: function(val){ return '**' + val + '**'}}
+            { name: 'Value', index: 'value'}
         ],
-        title: '<h4>Data</h4>',
+        gridClass: "table table-condensed table-bordered table-striped table-form",
         initLoader: '<div><i class="icon-refresh icon-spin"></i> Loading data...</div>',
-        refreshBtn: '<i class="icon-refresh icon-active"></i>',
+        initialPage: 1,
+        item: '<tr></tr>',
         loader: '<i class="icon-refresh icon-spin"></i>',
-        childRowProperty: 'children'
+        pageSize: 10,
+        pageSizes: [{text:"10", value: 10}, {text:"20", value: 20}, {text:"30", value: 30}, {text:"All", value: -1}],
+        refreshBtn: '<i class="icon-refresh icon-active"></i>',
+        showPageSizeSelector: true,
+        sortColumn: null,
+        sortDirection: "ASC",
+        title: '<h4>Data</h4>',
+        url: null
     };
 
     $.fn.pgGrid.Constructor = PGGrid;
