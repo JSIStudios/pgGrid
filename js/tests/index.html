@@ -13,36 +13,39 @@
 
 <script language="JavaScript">
     var items = [
-        {id: (1), value:"Me: " + (1), children:[{id: (1.1), value:"Me: " + (1.1)}, {id: (1.2), value:"Me: " + (1.2)}]},
-        {id: (2), value:"Me: " + (2)},
-        {id: (3), value:"Me: " + (3)},
-        {id: (4), value:"Me: " + (4)},
-        {id: (5), value:"Me: " + (5)},
-        {id: (6), value:"Me: " + (6)},
-        {id: (7), value:"Me: " + (7)},
-        {id: (8), value:"Me: " + (8)},
-        {id: (9), value:"Me: " + (9)},
-        {id: (10), value:"Me: " + (10)},
-        {id: (11), value:"Me: " + (11)},
-        {id: (12), value:"Me: " + (12)},
-        {id: (13), value:"Me: " + (13)},
-        {id: (14), value:"Me: " + (14)},
-        {id: (15), value:"Me: " + (15)},
-        {id: (16), value:"Me: " + (16)},
-        {id: (17), value:"Me: " + (17)},
-        {id: (18), value:"Me: " + (18)},
-        {id: (19), value:"Me: " + (19)},
-        {id: (20), value:"Me: " + (20)},
-        {id: (21), value:"Me: " + (21)},
-        {id: (22), value:"Me: " + (22)},
-        {id: (23), value:"Me: " + (23)},
-        {id: (24), value:"Me: " + (24)},
-        {id: (25), value:"Me: " + (25)}];
+        {id: (1), value:"aMe: " + (1), children:[{id: (1.1), value:"Me: " + (1.1)}, {id: (1.2), value:"Me: " + (1.2)}]},
+        {id: (2), value:"nMe: " + (2)},
+        {id: (3), value:"bMe: " + (3)},
+        {id: (4), value:"oMe: " + (4)},
+        {id: (5), value:"cMe: " + (5)},
+        {id: (6), value:"pMe: " + (6)},
+        {id: (7), value:"dMe: " + (7)},
+        {id: (8), value:"qMe: " + (8)},
+        {id: (9), value:"eMe: " + (9)},
+        {id: (10), value:"rMe: " + (10)},
+        {id: (11), value:"fMe: " + (11)},
+        {id: (12), value:"sMe: " + (12)},
+        {id: (13), value:"gMe: " + (13)},
+        {id: (14), value:"tMe: " + (14)},
+        {id: (15), value:"hMe: " + (15)},
+        {id: (16), value:"uMe: " + (16)},
+        {id: (17), value:"iMe: " + (17)},
+        {id: (18), value:"vMe: " + (18)},
+        {id: (19), value:"jMe: " + (19)},
+        {id: (20), value:"wMe: " + (20)},
+        {id: (21), value:"kMe: " + (21)},
+        {id: (22), value:"xMe: " + (22)},
+        {id: (23), value:"lMe: " + (23)},
+        {id: (24), value:"yMe: " + (24)},
+        {id: (25), value:"mMe: " + (25)}];
 
     $(document).ready(function () {
         $('#myGridDiv').pgGrid({
-            getData: function(page, pageSize, process){
-                var selItems = items;
+            getData: function(page, pageSize, sortCol, sortDir, process){
+                var selItems = sortCol == 'id' ? items.sort(SortByName) : sortCol == 'value' ? items.sort(SortByValue) : items;
+                if(sortDir == 'DESC')
+                    selItems = selItems.reverse();
+
                 if(pageSize > 0) {
                     var selItems = new Array();
                     for (var i in items) {
@@ -57,18 +60,42 @@
                     total: items.length,
                     items: selItems
                 });
-            }
-//            dataModel: [
-//                { name: 'id', index: 'id', width: 1, hidden: true, key: true },
-//                { name: 'Title', index: 'Title', width: 415 },
-//                { name: 'TimestampUTC', index: 'TimestampUTC', width: 160, formatter: utcDateFormatter },
-//                { name: 'Status', index: 'Status', width: 100, formatter: statusFormatter },
-//                { name: 'Type', index: 'Type', width: 75 },
-//                { name: 'id', index: 'Details', width: 18, formatter: detailsIconFormatter }
-//            ]
+            },
+            dataModel: [
+                { name: 'Id', index: 'id'},
+                { name: 'Value', index: 'value', formatter: function(val){ return '**' + val + '**'}},
+                { name: 'Fibonacci Sequence', sortable: false,
+                    formatter: function(val, item){
+                        var first,second,seq;
+                        for(var i=0;i<item.id;i++){
+                            if(i === 0){
+                                first = 1;
+                                second = 2;
+                            }
+                            seq = first + second;
+                            first = second;
+                            second = seq;
+                        }
+                        return seq}
+                    }
+            ]
         })
 
     });
+
+    function SortByName(a, b){
+        return Sort(a, b, 'id');
+    }
+
+    function SortByValue(a, b){
+        return Sort(a, b, 'value');
+    }
+
+    function Sort(a, b, i){
+        var aName = a[i];
+        var bName = b[i];
+        return ((aName < bName) ? -1 : ((aName > bName) ? 1 : 0));
+    }
 </script>
 </body>
 </html>
