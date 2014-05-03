@@ -44,6 +44,10 @@
         this.sortColumn = this.options.sortColumn;
         this.sortDirection = this.options.sortDirection;
         this.url = this.options.url;
+        this.dataTotalIndex = this.options.dataTotalIndex;
+        this.dataItemIndex = this.options.dataItemIndex;
+        this.padLeft = this.options.padLeft;
+        this.itemIdProperty = this.options.itemIdProperty;
 
         // initialize methods
         this.getData = this.options.getData || this.getData;
@@ -51,7 +55,8 @@
         this.render = this.options.render || this.render;
         this.setFooter = this.options.setFooter || this.setFooter;
         this.onSuccess = this.options.onSuccess || function(){ return; };
-        this.onError = this.options.onError || function(){ return; };
+        this.onError = this.options.onError || function () { return; };
+        this.buildQueryObject = this.options.buildQueryObject || this.buildQueryObject;
 
         // initialize objects
         this.$grid = $('<table class="pgGrid"><thead><tr></tr></thead><tbody></tbody><tfoot><tr><td></td></tr></tfoot></table>');
@@ -83,25 +88,35 @@
 
         // load data
         this.getPage(this.currentPage);
+        this.hide();
         this.$element.append(this.$grid);
-        this.$initLoader.hide();
-        this.$loader.hide();
     };
 
     PGGrid.prototype = {
         constructor: PGGrid,
-        getData: function(page, pageSize, sortCol, sortDir, process) {
-            var that = this;
+        hide : function() {
+            this.$grid.hide();
+        },
+        show: function() {
+            this.$grid.show();
+        },
+        getData: function(page, pageSize, sortCol, sortDir, process, that) {
             this.showLoader();
-            $.get(this.url, {page: page, limit: pageSize, sortColumn: sortCol, sortDirection: sortDir},
+            $.get(this.url, this.buildQueryObject(page, pageSize, sortCol, sortDir),
                 function(data, textStatus, jqXHR) {
                     that.onSuccess(data, textStatus, jqXHR);
+                    process(data);
+                    that.show();
                     that.hideLoader();
+                    that.$initLoader.hide();
                 })
                 .fail(this.onError);
         },
-        process: function(data) {
-            if (!data.items.length) {
+        buildQueryObject: function(page, pageSize, sortCol, sortDir) {
+            return { page: page, limit: pageSize, sortColumn: sortCol, sortDirection: sortDir };
+        },
+        process: function (data) {
+            if (!data[this.dataItemIndex].length) {
                 return this.hide();
             }
 
@@ -115,16 +130,16 @@
         buildBody: function(data){
             this.$body.empty();
 
-            for(var i in data.items){
-                this.buildRow(data.items[i], 0);
+            for (var i in data[this.dataItemIndex]) {
+                this.buildRow(data[this.dataItemIndex][i], 0);
             }
         },
         buildRow: function(item, childLevel, parentId){
             var that = this;
-            var id = item.id;
+            var id = item[this.itemIdProperty];
 
             var row = $("<tr></tr>")
-                .attr('id', item.id)
+                .attr('id', id)
                 .on('mouseEnter', 'tbody tr', $.proxy(this.mouseEnter, this))
                 .on('mouseLeave', 'tbody tr', $.proxy(this.mouseLeave, this));
 
@@ -138,7 +153,7 @@
             this.buildCols(item, row, childLevel);
             this.$body.append(row);
 
-            if(item.hasOwnProperty(this.childRowProperty)){
+            if (item.hasOwnProperty(this.childRowProperty) && item[this.childRowProperty] && item[this.childRowProperty].length) {
                 var expander = $('<i class="'+ ($.inArray(id, this.expandedRowIds) >= 0 ? 'icon-chevron-down' : 'icon-chevron-right') + ' icon-active"></i>')
                     .on('click', function(){ that.toggleChildren($(this), id); });
                 row.find('td:first').prepend(expander);
@@ -151,13 +166,15 @@
         buildCols: function(item, row, childLevel){
             for(var i in this.dataModel){
                 var model = this.dataModel[i];
-                var col = $('<td></td>').css('padding-left', (16 * childLevel));
+                var col = $('<td></td>');
                 var val = item[model.index];
                 if(typeof model.formatter !== 'undefined')
                     val = model.formatter(val, item);
                 col.append(val);
                 row.append(col);
             }
+
+            row.find('td').first().css('padding-left', (16 * childLevel) + this.padLeft);
         },
         buildHeader: function(){
             var headerRow = this.$header.find('tr:first');
@@ -237,7 +254,7 @@
             this.$footerRow.append(this.$footerContainer);
         },
         setFooter: function(data) {
-            var totalPages = this.pageSize == -1 ? 1 : Math.ceil(data.total / this.pageSize);
+            var totalPages = this.pageSize == -1 ? 1 : Math.ceil(data[this.dataTotalIndex] / this.pageSize);
             this.$pageSelector.text(this.currentPage);
             this.$pageCountText.text(totalPages);
 
@@ -297,7 +314,7 @@
         },
         refresh: function() {
             this.getData(this.currentPage, this.pageSize, this.sortColumn,
-                this.sortDirection, $.proxy(this.process, this));
+                this.sortDirection, $.proxy(this.process, this), this);
         },
         getPage: function(page){
             this.currentPage = page;
@@ -378,11 +395,15 @@
             { name: 'Id', index: 'id'},
             { name: 'Value', index: 'value'}
         ],
-        gridClass: "table table-condensed table-bordered table-striped table-form",
+        dataTotalIndex: 'total',
+        dataItemIndex: 'items',
+        gridClass: "table table-condensed table-bordered table-striped",
         initLoader: '<div><i class="icon-refresh icon-spin"></i> Loading data...</div>',
         initialPage: 1,
         item: '<tr></tr>',
+        itemIdProperty: 'id',
         loader: '<i class="icon-refresh icon-spin"></i>',
+        padLeft: 2,
         pageSize: 10,
         pageSizes: [{text:"10", value: 10}, {text:"20", value: 20}, {text:"30", value: 30}, {text:"All", value: -1}],
         refreshBtn: '<i class="icon-refresh icon-active"></i>',
